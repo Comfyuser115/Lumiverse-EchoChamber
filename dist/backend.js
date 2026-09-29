@@ -116,12 +116,52 @@ async function saveChat(chatId, items, userId) {
   cache.set(`${userId}:${chatId}`, trimmed)
   await spindle.userStorage.setJson(cachePath(chatId), trimmed, { userId })
 }
-function parseReactions(content, limit) {
-  return String(content || '').split(/\r?\n/).map(line => line.replace(/^\s*[-*\d.)]+\s*/, '').trim())
-    .filter(Boolean).map(line => {
-      const match = line.match(/^([^:]{1,80}):\s*(.{1,2000})$/)
-      return match ? { name: match[1].trim(), text: match[2].trim() } : null
-    }).filter(Boolean).slice(0, limit)
+function parseReactions(content, limit, allowGeneric = true) {
+  const source = String(content || '')
+    .replace(/<(thinking|think|thought|reasoning|reason)>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/?discordchat>/gi, '').trim()
+  if (!source) return []
+  if (/^[\[{]/.test(source)) {
+    try {
+      const parsed = JSON.parse(source)
+      const rows = Array.isArray(parsed) ? parsed :
+        parsed.reactions || parsed.messages || parsed.comments || parsed.chat
+      if (Array.isArray(rows)) {
+        const structured = rows.map(row => {
+          if (!row || typeof row !== 'object') return null
+          const name = limited(row.username || row.name || row.user || row.speaker, 80)
+          const text = limited(row.message || row.text || row.content, 2000)
+          return name && text ? { name, text } : null
+        }).filter(Boolean).slice(0, limit)
+        if (structured.length) return structured
+      }
+      const nested = parsed?.choices?.[0]?.message?.content || parsed?.output || parsed?.content
+      if (typeof nested === 'string' && nested !== source) return parseReactions(nested, limit, allowGeneric)
+      return []
+    } catch {
+      if (/^[\[{]\s*["{]/.test(source)) return []
+    }
+  }
+  const output = []
+  const lines = source.split(/\r?\n/)
+  for (const raw of lines) {
+    const line = raw.trim().replace(/^```[^`]*$/, '').trim()
+    if (!line || /^[-_.…]{3,}$/.test(line) || /^\s*(?:here (?:are|is)|reactions?:|comments?:|chat:)/i.test(line)) continue
+    const cleaned = line.replace(/^(?:[-*]\s+|\d+[.)]\s+)/, '')
+    const match = cleaned.match(/^(.{1,80}?):\s*(.+)$/)
+    if (match) {
+      const name = match[1].trim().replace(/^[*_`"']+|[*_`"']+$/g, '')
+      const text = match[2].trim()
+      if (name && text && !/^[\[{"']/.test(name)) output.push({ name, text: text.slice(0, 2000) })
+    } else if (output.length && !/^[\[{]/.test(cleaned)) {
+      const previous = output.at(-1)
+      previous.text = `${previous.text} ${cleaned}`.slice(0, 2000)
+    } else if (allowGeneric && !/^[\[{]/.test(cleaned) && cleaned.length > 1) {
+      output.push({ name: 'Viewer', text: cleaned.slice(0, 2000) })
+    }
+    if (output.length >= limit) break
+  }
+  return output
 }
 function endpoint(base, path) {
   let url
@@ -280,12 +320,12 @@ async function generate(chatId, userId, replyTo = null, overrideCount = null) {
     const rawStyle = settings.customStyles[settings.style]?.prompt || settings.styleOverrides[settings.style] || styles[settings.style] || styles[defaults.style]
     const style = await resolveStyleMacros(rawStyle, chatId, userId)
     const content = await modelText([
-      { role: 'system', content: `${style}${context}\n\nOutput only lines in this exact format: username: message. Do not include numbering, headings, or chat transcript text.` },
+      { role: 'system', content: `${style}${context}\n\nOutput only one reaction per line in this exact format: username: message. Use a different username for each line. Do not include numbering, headings, JSON, code fences, reasoning, or chat transcript text.` },
       { role: 'user', content: `Conversation:\n${recent}${past}\n\n${prompt}` },
     ], settings, userId, job.controller.signal)
     if (job.canceled || activeChats.get(userId) !== chatId) return
-    const reactions = parseReactions(content, count)
-    if (!reactions.length) throw new Error('The model did not return any “username: message” lines. Try regenerating.')
+    const reactions = parseReactions(content, count, !['sillytavern', 'sillytavern_story'].includes(settings.style))
+    if (!reactions.length) throw new Error(typeof content === 'string' && content.trim() ? 'The model returned text that could not be used as audience reactions. Try another model or style.' : 'The model returned an empty reply. Try another connection profile or increase the token limit.')
     if (replyTo) reactions.unshift({ name: replyTo.name, text: replyTo.text, mine: true, target: replyTo.target || undefined })
     const next = [...prior, ...reactions]
     await saveChat(chatId, next, userId)

@@ -158,6 +158,25 @@ test('style macros use active Lumiverse names and story prompts resolve their ca
   assert.match(generationCalls.at(-1).messages[0].content, /Speak as Persona with Character\./)
 })
 
+test('reaction parser accepts markdown, structured replies, prose, and strips reasoning', async () => {
+  await message({ type: 'settings', settings: { source: 'lumiverse', style: 'discordtwitch' } })
+  for (const [reply, expectedName] of [
+    ['**River**: Big moment!\n2. @Dax: I saw that too.', '@Dax'],
+    [JSON.stringify({ reactions: [{ username: 'JSONFan', message: 'That twist!' }] }), 'JSONFan'],
+    ['The crowd gasps at the surprise.', 'Viewer'],
+    ['<think>Private reasoning</think>\nSage: What a scene.', 'Sage'],
+  ]) {
+    generationText = reply
+    await message({ type: 'generate' })
+    assert.equal(last('reactions').items.at(-1).name, expectedName)
+    assert.ok(!last('reactions').items.at(-1).text.includes('Private reasoning'))
+  }
+  generationText = ''
+  await message({ type: 'generate' })
+  assert.match(last('error').message, /empty reply/)
+  generationText = 'Viewer: hello from the audience'
+})
+
 test('cancel ignores a pending generation result', async () => {
   let release
   generationGate = { promise: new Promise(resolve => { release = resolve }) }
