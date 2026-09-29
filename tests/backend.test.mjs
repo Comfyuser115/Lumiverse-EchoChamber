@@ -11,6 +11,7 @@ let frontendHandler
 let generationText = 'Viewer: hello from the audience'
 let corsResponse = { status: 200, body: JSON.stringify({ choices: [{ message: { content: generationText } }] }) }
 let generationGate = null
+let generationFailures = []
 const messages = [{ role: 'user', content: 'What happened?' }, { role: 'assistant', content: 'A scene unfolded.' }]
 globalThis.spindle = {
   sendToFrontend: (value, userId) => sent.push({ ...value, userId }),
@@ -32,7 +33,7 @@ globalThis.spindle = {
     { id: 'conn1', name: 'Main RP', model: 'expensive-model', provider: 'openai', is_default: true },
     { id: 'conn2', name: 'Audience', model: 'cheap-model', provider: 'openai', is_default: false },
   ], get: async id => ['conn1', 'conn2'].includes(id) ? { id } : null },
-  generate: { quiet: async input => { generationCalls.push(input); if (generationGate) await generationGate.promise; return { content: generationText } } },
+  generate: { quiet: async input => { generationCalls.push(input); if (generationGate) await generationGate.promise; if (generationFailures.length) throw generationFailures.shift(); return { content: generationText } } },
   cors: async (url, options) => { corsCalls.push({ url, options }); return corsResponse },
   tokens: { countText: async text => ({ total_tokens: Math.ceil(text.length / 4) }) },
   personas: { getActive: async () => { contextReads.push('persona'); return { name: 'Persona', description: 'Persona text' } } },
@@ -217,4 +218,21 @@ test('cancel ignores a pending generation result', async () => {
   generationGate = null
   assert.equal(last('reactions'), before)
   assert.equal(last('busy').value, false)
+})
+
+test('retries one upstream empty OpenRouter 502 and reports persistent failure', async () => {
+  await message({ type: 'settings', settings: { source: 'lumiverse', connectionId: 'conn2' } })
+  const providerError = 'OpenRouter generate failed (502): Provider returned an empty response'
+  const before = generationCalls.length
+  generationFailures = [new Error(providerError)]
+  await message({ type: 'generate' })
+  assert.equal(generationCalls.length, before + 2)
+  assert.equal(generationCalls.at(-1).connection_id, 'conn2')
+  const afterSuccess = last('reactions')
+
+  generationFailures = [new Error(providerError), new Error(providerError)]
+  await message({ type: 'generate' })
+  assert.match(last('error').message, /empty provider response twice/)
+  assert.match(last('error').message, /different EchoChamber connection profile/)
+  assert.equal(last('reactions'), afterSuccess)
 })

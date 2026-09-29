@@ -196,8 +196,19 @@ async function modelText(messages, settings, userId, signal) {
       if (!profile) throw new Error('Selected Lumiverse connection profile was not found.')
       input.connection_id = settings.connectionId
     }
-    const result = await spindle.generate.quiet(input)
-    return result?.content || ''
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await spindle.generate.quiet(input)
+        return result?.content || ''
+      } catch (error) {
+        const emptyProviderResponse = /OpenRouter generate failed \(502\): Provider returned an empty response/i.test(String(error?.message || error))
+        if (!emptyProviderResponse) throw error
+        if (signal?.aborted) throw error
+        if (attempt === 1) {
+          throw new Error('OpenRouter returned an empty provider response twice (HTTP 502). Try another provider in this Lumiverse connection, enable provider fallbacks, or select a different EchoChamber connection profile.')
+        }
+      }
+    }
   }
   if (settings.source === 'ollama') {
     if (!settings.ollamaModel) throw new Error('Select an Ollama model first.')
