@@ -6,7 +6,7 @@
   "github": "https://github.com/Comfyuser115/Lumiverse-EchoChamber",
   "homepage": "https://github.com/Comfyuser115/Lumiverse-EchoChamber",
   "description": "AI audience reactions to the current chat, adapted from EchoChamber for SillyTavern.",
-  "permissions": ["generation", "chats", "chat_mutation", "ui_panels"],
+  "permissions": ["generation", "chats", "chat_mutation", "ui_panels", "cors_proxy", "characters", "personas", "world_books"],
   "entry_backend": "dist/backend.js",
   "entry_frontend": "dist/frontend.js"
 }

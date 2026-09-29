@@ -1,35 +1,56 @@
 # EchoChamber for Lumiverse
 
-A native [Spindle](https://github.com/prolix-oc/Lumiverse) port of [mattjaybe's EchoChamber](https://github.com/mattjaybe/SillyTavern-EchoChamber). Original style prompts are included under `chat-styles/` and bundled into `dist/styles.js`. See `LICENSE` for the original MIT license.
+A [Lumiverse Spindle](https://github.com/prolix-oc/Lumiverse) adaptation of [mattjaybe's EchoChamber for SillyTavern](https://github.com/mattjaybe/SillyTavern-EchoChamber). The original 14 audience prompts are included in `chat-styles/` and bundled in `dist/styles.js`. The original MIT license is included.
 
 ## Features
 
-- 14 original audience styles, including Discord/Twitch, Twitter/X, Breaking News, MST3K, AO3/Wattpad, and the two story cast styles.
-- Generate on demand or automatically after an assistant reply.
-- Send a message to the audience and get responses.
-- Feed saved separately for each chat and user, capped at 200 reactions per chat.
-- Drawer tab or resizable right dock panel. Theme aware UI.
-- Uses Lumiverse's active connection through `spindle.generate.quiet()`.
+| Feature | Lumiverse adaptation |
+| --- | --- |
+| 14 built-in styles | Discord/Twitch, Twitter/X, Breaking News, MST3K, AO3/Wattpad, Dark Roast, Doomscrollers, HypeBot, roleplay/story cast, and more. |
+| Flexible model backends | Active Lumiverse connection or a selected connection profile; direct Ollama and OpenAI-compatible endpoints for KoboldCPP, LM Studio, vLLM, and similar servers. |
+| Five panel positions | Top, bottom, left, right, or a draggable and resizable floating widget. A drawer tab is also available. |
+| Chat participation | Send a message as your configured audience name; click a commenter or type `@` to address one. Set your name, avatar color, and reply count. |
+| Livestream | Reveal generated reactions with configurable random intervals. Manual, on-message, and after-batch modes; pause/resume and auto-scroll controls. |
+| Quick controls | Style, audience size, regenerate/stop, layout, font size, power, livestream, collapse, and clear controls. |
+| Theme aware | Uses Lumiverse theme variables for colors, surfaces, and borders. |
+| Style manager | Create, edit, hide, reorder, import, and export styles. Built-in prompt edits are saved as overrides. Easy and advanced creation modes are included. |
+| Markdown | Reaction text supports bold, italic, underline, inline code, and @mentions. Rendering creates text and formatting nodes rather than inserting model output as HTML. |
 
-The port uses the recent visible user/assistant messages as context. It does **not** import SillyTavern settings or reaction history, and it does not use the original extension's Ollama/OpenAI direct connection modes, floating window, livestream animation, or style editor. The original prompts are bundled, so editing a `chat-styles/*.md` file alone does not change the installed prompt; rebuild `dist/styles.js` after editing one.
+The extension can also include selected context from the active persona, character description, author's note, chat summary, and activated world info. These context options are off by default. The cast styles and custom `{{user}}`, `{{char}}`, `{{characters}}`, or `{{story_characters_block}}` macros resolve names from the active Lumiverse chat and persona. Reaction feeds and settings are saved separately for each user; feeds are scoped to each chat.
 
 ## Install
 
 1. In Lumiverse, open **Extensions → Add Extension → Install from Source**.
-2. Paste `https://github.com/Comfyuser115/Lumiverse-EchoChamber` and install.
-3. Enable EchoChamber and grant **Generation**, **Chats**, **Chat Mutation**, and **UI Panels** when prompted.
-4. Open the **Echo** drawer tab. Open a chat and press **↻** to generate reactions. **Auto off** enables reactions after future assistant replies.
+2. Paste `https://github.com/Comfyuser115/Lumiverse-EchoChamber`.
+3. Enable EchoChamber and grant the permissions needed for the features you use.
+4. Open the **Echo** drawer tab. Open a chat and press **Regenerate** to create the first audience reactions.
 
-The repository includes `dist/`, so installation does not need a build step or npm install. Lumiverse can update it from this repository.
+The repository includes ready-to-load `dist/` files. It does not require npm packages or a build step. Lumiverse can update the extension from this repository.
 
-## Permissions and data
+## Model backends
 
-| Permission | Use |
+- **Lumiverse:** Uses your active connection, or a connection profile selected in EchoChamber settings.
+- **Ollama:** Enter the server URL and model name. The request goes to `/api/chat`.
+- **OpenAI-compatible:** Enter a base URL and model name. The extension calls `/v1/chat/completions`. This works with servers offering that endpoint, including KoboldCPP, LM Studio, and vLLM. An optional API key is stored in Lumiverse's encrypted per-user secure enclave.
+
+Direct backend requests use Lumiverse's server-side CORS proxy. `localhost` in a backend URL refers to the **Lumiverse server**, which may differ from the device running your browser.
+
+## Permissions
+
+| Permission | Used for |
 | --- | --- |
-| `generation` | Generate audience reactions with the active Lumiverse connection. |
-| `chats` | Find the active chat when the extension opens. |
-| `chat_mutation` | Read recent chat messages as prompt context. The port never changes chat messages. |
-| `ui_panels` | Open the right dock panel. |
+| `generation` | Reactions through Lumiverse and connection profile selection. |
+| `chats`, `chat_mutation` | Find the active chat and read recent messages as reaction context. EchoChamber does not edit chat messages. |
+| `ui_panels` | Docked and floating panel positions. |
+| `cors_proxy` | Ollama and OpenAI-compatible server requests. |
+| `characters`, `personas`, `world_books` | Optional context switches, plus character/persona name lookup when a style contains a matching macro. |
 
-The extension does not request `characters`, `personas`, or `world_books`. It stores its own settings and reaction feeds in Lumiverse's per-user extension storage. It does not send data to any service other than the model provider selected in Lumiverse.
+API keys stay in the secure enclave; they are not returned to the browser as settings. The extension sends prompt context only to the model backend you configure.
 
+## Style files and development
+
+Custom styles can be imported or exported as Markdown or JSON in the panel's Style Manager. The Markdown files under `chat-styles/` are the original source prompts. At runtime, the backend reads their bundled copy in `dist/styles.js`; changing a Markdown source file alone does not alter an installed style.
+
+Run local checks with `node --test tests/*.test.mjs`. These exercise the backend and frontend protocol with fixtures; they do not access your Lumiverse account or content.
+
+This port uses Lumiverse's native APIs. It does not import SillyTavern settings, chat caches, or connection profiles automatically.
