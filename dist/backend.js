@@ -86,6 +86,73 @@ async function saveSettings(userId, incoming) {
   await spindle.userStorage.setJson(SETTINGS_PATH, settings, { userId });
   return true;
 }
+async function loadSettings(userId) {
+  const saved = await spindle.userStorage.getJson(SETTINGS_PATH, { fallback: null, userId });
+  if (saved) return saved;
+  const old = await spindle.userStorage.getJson("settings.json", { fallback: null, userId });
+  if (!old || typeof old !== "object") return null;
+  const styleIds = {
+    discordtwitch: "twitch",
+    thoughtfulverbose: "verbose",
+    twitterx: "twitter",
+    breakingnews: "news",
+    nsfwava: "nsfw_ava",
+    nsfwkai: "nsfw_kai"
+  };
+  const styleId = (id) => styleIds[id] || id;
+  const custom_styles = {};
+  for (const [id, entry] of Object.entries(old.customStyles || {})) {
+    if (entry?.prompt) custom_styles[styleId(id)] = { name: text(entry.name, 100) || id, prompt: text(entry.prompt, 3e4) };
+  }
+  for (const [id, prompt] of Object.entries(old.styleOverrides || {})) {
+    if (typeof prompt === "string" && prompt) custom_styles[styleId(id)] = { name: styleId(id), prompt: text(prompt, 3e4) };
+  }
+  const migrated = {
+    enabled: old.enabled !== false,
+    paused: old.paused === true,
+    source: old.source === "lumiverse" ? old.connectionId ? "profile" : "default" : old.source,
+    preset: text(old.connectionId, 128),
+    url: text(old.ollamaUrl, 500) || "http://localhost:11434",
+    model: text(old.ollamaModel, 200),
+    openai_url: text(old.openaiUrl, 500) || "http://localhost:1234/v1",
+    openai_model: text(old.openaiModel, 200) || "local-model",
+    style: styleId(old.style || "twitch"),
+    userCount: old.count || 5,
+    contextDepth: old.depth || 4,
+    position: ["top", "bottom", "left", "right"].includes(old.position) ? old.position : "bottom",
+    floatOpen: old.position === "float",
+    chatHeight: old.panelHeight || 250,
+    panelWidth: old.panelWidth || 350,
+    opacity: old.panelOpacity || 85,
+    fontSize: old.fontSize || 15,
+    collapsed: old.collapsed === true,
+    autoUpdateOnMessages: old.autoUpdateOnMessages !== false,
+    includeUserInput: old.includeUserInput === true,
+    includePastEchoChambers: old.includePastEchoChambers === true,
+    includePersona: old.includePersona === true,
+    includeAuthorsNote: old.includeAuthorsNote === true,
+    includeCharacterDescription: old.includeCharacterDescription === true,
+    includeSummary: old.includeSummary === true,
+    includeWorldInfo: old.includeWorldInfo === true,
+    wiBudget: old.wiBudget || 0,
+    livestream: old.livestream === true,
+    livestreamBatchSize: old.livestreamBatchSize || 20,
+    livestreamMinWait: old.livestreamMinWait || 5,
+    livestreamMaxWait: old.livestreamMaxWait || 60,
+    livestreamMode: old.livestreamMode || "manual",
+    livestreamAutoScroll: old.livestreamAutoScroll !== false,
+    chatEnabled: old.chatEnabled !== false,
+    chatUsername: text(old.chatUsername, 100) || "Streamer (You)",
+    chatAvatarColor: old.chatAvatarColor || "#3b82f6",
+    chatReplyCount: old.chatReplyCount || 3,
+    messageOrder: old.messageOrder || "oldest-first",
+    custom_styles,
+    deleted_styles: (old.deletedStyles || []).map(styleId),
+    style_order: (old.styleOrder || []).map(styleId)
+  };
+  await spindle.userStorage.setJson(SETTINGS_PATH, migrated, { userId });
+  return migrated;
+}
 async function generate(userId, payload, id) {
   if (!spindle.permissions.has("generation")) throw new Error("Grant Generation permission to EchoChamber.");
   const controller = new AbortController();
@@ -143,7 +210,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
     switch (payload.action) {
       case "hydrate":
         result = {
-          settings: await spindle.userStorage.getJson(SETTINGS_PATH, { fallback: null, userId }),
+          settings: await loadSettings(userId),
           snapshot: await snapshot(userId, payload.options)
         };
         break;

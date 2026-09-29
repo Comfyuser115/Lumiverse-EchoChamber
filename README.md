@@ -8,7 +8,9 @@ The Lumiverse bridge provides chat history, connection profiles, generation, set
 
 Install `https://github.com/Comfyuser115/Lumiverse-EchoChamber` as a Lumiverse Spindle extension, then reload the extension. Open **EchoChamber** in the drawer or Lumiverse settings. In **Generation Engine**, choose **Default** for the main Lumiverse connection or **Connection Profile** for a separate model.
 
-Ollama and OpenAI compatible endpoints use Lumiverse's CORS proxy. The OpenAI compatible API key is stored in the Lumiverse enclave rather than extension settings. Grant the extension's requested permissions when prompted. Optional persona, character description, author's note, summary, and world information are supplied only when their EchoChamber settings are enabled.
+On first launch, the bridge migrates settings from the earlier Lumiverse port, including the selected connection profile. The previous settings and feed data stay available to the backup branch.
+
+Ollama and OpenAI compatible endpoints use Lumiverse's CORS proxy. The OpenAI compatible API key is stored in the Lumiverse enclave rather than extension settings. Grant the extension's requested permissions when prompted. Persona and character names support the upstream style macros; their descriptions, the author's note, summary, and world information are supplied only when their EchoChamber settings are enabled.
 
 ## Styles and build
 

@@ -79,3 +79,13 @@ test('optional lore data is requested only after the corresponding setting is en
   assert.equal(state.details.worldInfo, 'Synthetic lore')
   assert.ok(reads.includes('world'))
 })
+
+test('earlier Lumiverse settings migrate to the upstream connection profile setting', async () => {
+  stored.delete('upstream-settings.json')
+  stored.set('settings.json', { source: 'lumiverse', connectionId: 'cheap', style: 'discordtwitch', count: 7 })
+  const state = await request('hydrate')
+  assert.equal(state.settings.source, 'profile')
+  assert.equal(state.settings.preset, 'cheap')
+  assert.equal(state.settings.style, 'twitch')
+  assert.equal(state.settings.userCount, 7)
+})
