@@ -116,7 +116,7 @@ async function saveChat(chatId, items, userId) {
   cache.set(`${userId}:${chatId}`, trimmed)
   await spindle.userStorage.setJson(cachePath(chatId), trimmed, { userId })
 }
-function parseReactions(content, limit, allowGeneric = true) {
+function parseReactions(content, limit) {
   const source = String(content || '')
     .replace(/<(thinking|think|thought|reasoning|reason)>[\s\S]*?<\/\1>/gi, '')
     .replace(/<\/?discordchat>/gi, '').trim()
@@ -141,7 +141,7 @@ function parseReactions(content, limit, allowGeneric = true) {
         if (name && text) return [{ name, text }]
       }
       const nested = parsed?.choices?.[0]?.message?.content || parsed?.output || parsed?.content
-      if (typeof nested === 'string' && nested !== source) return parseReactions(nested, limit, allowGeneric)
+      if (typeof nested === 'string' && nested !== source) return parseReactions(nested, limit)
       return []
     } catch {
       if (/^[\[{]\s*["{]/.test(source)) return []
@@ -163,8 +163,6 @@ function parseReactions(content, limit, allowGeneric = true) {
     } else if (output.length && !/^[\[{]/.test(cleaned)) {
       const previous = output.at(-1)
       previous.text = `${previous.text} ${cleaned}`.slice(0, 2000)
-    } else if (allowGeneric && !/^[\[{]/.test(cleaned) && cleaned.length > 1) {
-      output.push({ name: 'Viewer', text: cleaned.slice(0, 2000) })
     }
     if (output.length >= limit) break
   }
@@ -219,6 +217,11 @@ async function modelText(messages, settings, userId, signal) {
     : Array.isArray(content) ? content.filter(part => part?.type === 'text').map(part => part.text).join('') : ''
 }
 function limited(value, max) { return typeof value === 'string' ? value.trim().slice(0, max) : '' }
+function cleanMessage(value) {
+  return limited(value, 12000)
+    .replace(/<(thinking|think|thought|reasoning|reason)>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<[^>]*>/g, '').trim()
+}
 async function resolveStyleMacros(style, chatId, userId) {
   if (!/\{\{(?:user|char|characters|story_characters_block)\}\}/i.test(style)) return style
   let personaName = 'User'
@@ -298,7 +301,7 @@ async function optionalContext(chatId, userId, settings, all) {
   }
   return parts.length ? `\n\n<lore>\n${parts.join('\n\n')}\n</lore>` : ''
 }
-async function generate(chatId, userId, replyTo = null, overrideCount = null) {
+async function generate(chatId, userId, replyTo = null, overrideCount = null, manual = false) {
   const settings = await settingsFor(userId)
   if (busyUsers.has(userId) || !settings.enabled || settings.paused) return
   if (!spindle.permissions.has('chat_mutation')) {
@@ -310,33 +313,40 @@ async function generate(chatId, userId, replyTo = null, overrideCount = null) {
   busyUsers.add(userId)
   send({ type: 'busy', value: true, chatId }, userId)
   try {
+    const narrator = ['nsfwava', 'nsfwkai', 'hypebot'].includes(settings.style)
     const count = overrideCount == null
-      ? (replyTo ? settings.chatReplyCount : settings.livestream ? settings.livestreamBatchSize : settings.count)
+      ? (replyTo ? settings.chatReplyCount : settings.livestream && !manual ? settings.livestreamBatchSize : narrator ? 1 : settings.count)
       : clamp(overrideCount, settings.count, 1, 30)
     const all = await spindle.chat.getMessages(chatId)
-    const recent = all.filter(m => (m.role === 'assistant' || (settings.includeUserInput && m.role === 'user')) && typeof m.content === 'string' && m.content.trim())
-      .slice(-settings.depth).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content.slice(0, 6000)}`).join('\n\n')
-    if (!recent) throw new Error('This chat has no messages yet.')
+    const visible = all.filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    const recent = settings.includeUserInput ? visible.slice(-settings.depth) : visible.slice(-1)
+    if (!recent.length) throw new Error('This chat has no messages yet.')
     const prior = await loadChat(chatId, userId)
     const context = await optionalContext(chatId, userId, settings, all)
     const past = settings.includePastEchoChambers && prior.length
-      ? `\nRecent audience reactions:\n${prior.slice(-20).map(x => `${x.name}: ${x.text}`).join('\n')}` : ''
-    const prompt = replyTo
-      ? `The streamer ${replyTo.name}${replyTo.target ? ` addresses @${replyTo.target}` : ''}: ${replyTo.text}\nWrite ${count} audience replies. Address the streamer or mentioned audience member naturally.`
-      : `Write ${count} brief, varied audience reactions to the latest events. React to the most recent message, with occasional interaction between audience members.`
+      ? `\n<recent_chatroom_history>\n${prior.slice(-20).map(x => `${x.name}: ${x.text}`).join('\n')}\n</recent_chatroom_history>` : ''
     const rawStyle = settings.customStyles[settings.style]?.prompt || settings.styleOverrides[settings.style] || styles[settings.style] || styles[defaults.style]
     const style = await resolveStyleMacros(rawStyle, chatId, userId)
-    const content = await modelText([
-      { role: 'system', content: `${style}${context}\n\nOutput only one reaction per line in this exact format: username: message. Use a different username for each line. Do not include numbering, headings, JSON, code fences, reasoning, or chat transcript text.` },
-      { role: 'user', content: `Conversation:\n${recent}${past}\n\n${prompt}` },
-    ], settings, userId, job.controller.signal)
+    const task = replyTo
+      ? `The streamer ${replyTo.name}${replyTo.target ? ` addresses @${replyTo.target}` : ''}: ${replyTo.text}\nWrite exactly ${count} short replies from audience members to this message.`
+      : narrator && settings.livestream && !manual
+        ? `Write exactly ${count} short live chat messages from the same narrator reacting to the most recent chat turn.`
+      : settings.livestream && !manual && !narrator
+        ? `Write exactly ${count} short live chat messages from about ${settings.count} distinct audience members reacting to the most recent chat turn.`
+        : `Write exactly ${count} short audience reaction${count === 1 ? '' : 's'} to the most recent chat turn.`
+    const messages = [
+      { role: 'system', content: `You create a fake live audience feed that reacts to the conversation. Do not continue the story or roleplay as the assistant.${context}` },
+      ...recent.map(m => ({ role: m.role, content: cleanMessage(m.content).slice(0, 6000) })),
+      { role: 'user', content: `<instructions>\n${style}\n</instructions>${past}\n<task>\n${task}\nOutput only lines formatted username: message. Do not include a preamble, JSON, reasoning, or the chat transcript.\n</task>` },
+    ]
+    const content = await modelText(messages, settings, userId, job.controller.signal)
     if (job.canceled || activeChats.get(userId) !== chatId) return
-    const reactions = parseReactions(content, count, !['sillytavern', 'sillytavern_story'].includes(settings.style))
+    const reactions = parseReactions(content, count)
     if (!reactions.length) throw new Error(typeof content === 'string' && content.trim() ? 'The model returned text that could not be used as audience reactions. Try another model or style.' : 'The model returned an empty reply. Try another connection profile or increase the token limit.')
     if (replyTo) reactions.unshift({ name: replyTo.name, text: replyTo.text, mine: true, target: replyTo.target || undefined })
-    const next = [...prior, ...reactions]
+    const next = manual && !replyTo ? reactions : [...prior, ...reactions]
     await saveChat(chatId, next, userId)
-    if (!job.canceled) send({ type: 'reactions', chatId, items: next }, userId)
+    if (!job.canceled) send({ type: 'reactions', chatId, items: next, animate: settings.livestream && !manual && !replyTo }, userId)
   } catch (error) {
     if (!job.canceled) send({ type: 'error', message: String(error?.message || error) }, userId)
   } finally {
@@ -426,7 +436,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
         ? { name: settings.chatUsername, text: payload.text.trim().slice(0, 1000),
             target: limited(payload.target || payload.targetName, 80).replace(/^@/, '') } : null
       if (payload.type === 'reply' && !reply?.text) return
-      return await generate(chatId, userId, reply, payload.count)
+      return await generate(chatId, userId, reply, payload.count, payload.manual === true || payload.type === 'reply')
     }
     if (payload?.type === 'clear' && activeChats.get(userId)) {
       const chatId = activeChats.get(userId)

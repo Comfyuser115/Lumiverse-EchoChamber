@@ -100,8 +100,8 @@ test('Lumiverse profile, reply target and custom prompt are passed into generati
   await message({ type: 'reply', text: 'Hi @Viewer', target: 'Viewer' })
   assert.equal(generationCalls.at(-1).connection_id, 'conn1')
   assert.deepEqual(generationCalls.at(-1).reasoning, { source: 'off' })
-  assert.match(generationCalls.at(-1).messages[0].content, /Custom prompt/)
-  assert.match(generationCalls.at(-1).messages[1].content, /@Viewer/)
+  assert.match(generationCalls.at(-1).messages.at(-1).content, /Custom prompt/)
+  assert.match(generationCalls.at(-1).messages.at(-1).content, /@Viewer/)
   assert.equal(last('reactions').items.at(-2).target, 'Viewer')
 })
 
@@ -142,13 +142,13 @@ test('positive world-info budget uses tokenizer and limits inserted text', async
 test('style macros use active Lumiverse names and story prompts resolve their cast block', async () => {
   await message({ type: 'settings', settings: { style: 'sillytavern' } })
   await message({ type: 'generate' })
-  const roleplay = generationCalls.at(-1).messages[0].content
+  const roleplay = generationCalls.at(-1).messages.at(-1).content
   assert.match(roleplay, /- Character/)
   assert.ok(!roleplay.includes('{{characters}}'))
 
   await message({ type: 'settings', settings: { style: 'sillytavern_story' } })
   await message({ type: 'generate' })
-  const story = generationCalls.at(-1).messages[0].content
+  const story = generationCalls.at(-1).messages.at(-1).content
   assert.match(story, /Identify the speaking characters/)
   assert.ok(!story.includes('{{story_characters_block}}'))
 
@@ -156,7 +156,7 @@ test('style macros use active Lumiverse names and story prompts resolve their ca
     style: 'custom', customStyles: { custom: { name: 'Custom', prompt: 'Speak as {{user}} with {{char}}.' } },
   } })
   await message({ type: 'generate' })
-  assert.match(generationCalls.at(-1).messages[0].content, /Speak as Persona with Character\./)
+  assert.match(generationCalls.at(-1).messages.at(-1).content, /Speak as Persona with Character\./)
 })
 
 test('reaction parser accepts markdown, structured replies, prose, and strips reasoning', async () => {
@@ -166,7 +166,6 @@ test('reaction parser accepts markdown, structured replies, prose, and strips re
     [JSON.stringify({ reactions: [{ username: 'JSONFan', message: 'That twist!' }] }), 'JSONFan'],
     [JSON.stringify({ username: 'SoloFan', message: 'Amazing scene!' }), 'SoloFan'],
     ['DashFan — I loved that twist.', 'DashFan'],
-    ['The crowd gasps at the surprise.', 'Viewer'],
     ['<think>Private reasoning</think>\nSage: What a scene.', 'Sage'],
   ]) {
     generationText = reply
@@ -177,7 +176,31 @@ test('reaction parser accepts markdown, structured replies, prose, and strips re
   generationText = ''
   await message({ type: 'generate' })
   assert.match(last('error').message, /empty reply/)
+  const before = last('reactions')
+  generationText = 'The crowd gasps at the surprise.'
+  await message({ type: 'generate' })
+  assert.equal(last('reactions'), before)
+  assert.match(last('error').message, /could not be used/)
   generationText = 'Viewer: hello from the audience'
+})
+
+test('manual regeneration uses latest turn and displays immediately even in livestream', async () => {
+  messages.push({ role: 'user', content: 'A synthetic latest turn.' })
+  await message({ type: 'settings', settings: { source: 'lumiverse', livestream: true,
+    livestreamBatchSize: 20, count: 5, includeUserInput: false, style: 'discordtwitch' } })
+  await message({ type: 'generate', manual: true })
+  const manual = generationCalls.at(-1).messages
+  assert.equal(manual.length, 3)
+  assert.equal(manual[1].role, 'user')
+  assert.equal(manual[1].content, 'A synthetic latest turn.')
+  assert.match(manual.at(-1).content, /exactly 5 short audience reactions/)
+  assert.equal(last('reactions').animate, false)
+  assert.equal(last('reactions').items.length, 1)
+  await message({ type: 'generate' })
+  assert.match(generationCalls.at(-1).messages.at(-1).content, /exactly 20 short live chat messages/)
+  assert.equal(last('reactions').animate, true)
+  messages.pop()
+  await message({ type: 'settings', settings: { livestream: false } })
 })
 
 test('cancel ignores a pending generation result', async () => {

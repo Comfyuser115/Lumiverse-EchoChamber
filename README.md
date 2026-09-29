@@ -10,7 +10,7 @@ A [Lumiverse Spindle](https://github.com/prolix-oc/Lumiverse) adaptation of [mat
 | Flexible model backends | Active Lumiverse connection or a selected connection profile; direct Ollama and OpenAI-compatible endpoints for KoboldCPP, LM Studio, vLLM, and similar servers. |
 | Five panel positions | Top, bottom, left, right, or a draggable and resizable floating widget. A drawer tab is also available. |
 | Chat participation | Send a message as your configured audience name; click a commenter or type `@` to address one. Set your name, avatar color, and reply count. |
-| Livestream | Reveal generated reactions with configurable random intervals. Manual, on-message, and after-batch modes; pause/resume and auto-scroll controls. |
+| Livestream | Reveal background reactions with configurable random intervals. Manual **Regenerate** replaces the feed and displays its batch immediately. Turning Live off pauses the reveal queue; turning it back on resumes it. Manual, on-message, and after-batch modes; pause/resume and auto-scroll controls. |
 | Quick controls | Style, audience size, regenerate/stop, layout, font size, power, livestream, collapse, and clear controls. |
 | Theme aware | Uses Lumiverse theme variables for colors, surfaces, and borders. |
 | Style manager | Create, edit, hide, reorder, import, and export styles. Built-in prompt edits are saved as overrides. Easy and advanced creation modes are included. |

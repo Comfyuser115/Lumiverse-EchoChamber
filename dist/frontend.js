@@ -404,7 +404,7 @@ export function setup(ctx) {
   function updateSettings(changes) {
     settings = { ...settings, ...changes }
     if ('livestream' in changes || 'livestreamMode' in changes || changes.paused === true || changes.enabled === false) clearTimer()
-    if (changes.livestream === false) { clearReveal(); shown = items.length }
+    if (changes.livestream === false) clearReveal()
     if (changes.position != null || changes.panelWidth != null || changes.panelHeight != null) place()
     render()
     ctx.sendToBackend({ type: 'settings', settings })
@@ -475,11 +475,12 @@ export function setup(ctx) {
     const old = items
     items = Array.isArray(next) ? next : []
     const isAppend = items.length >= old.length && old.every((item, index) => JSON.stringify(item) === JSON.stringify(items[index]))
-    if (!animate || !settings.livestream || !isAppend) {
+    if (!animate || !isAppend) {
       clearReveal(); shown = items.length; renderRows(); scheduleLive()
     } else {
       shown = Math.min(shown, old.length)
-      revealNext()
+      if (settings.livestream) revealNext()
+      else renderRows()
     }
   }
   function sendReply() {
@@ -603,7 +604,7 @@ export function setup(ctx) {
   function bind(control, fieldName, numeric = false) {
     control.addEventListener('change', () => updateSettings({ [fieldName]: numeric ? Number(control.value) : control.value }))
   }
-  generateButton.addEventListener('click', () => { clearTimer(); ctx.sendToBackend({ type: busy ? 'cancel' : 'generate' }) })
+  generateButton.addEventListener('click', () => { clearTimer(); ctx.sendToBackend(busy ? { type: 'cancel' } : { type: 'generate', manual: true }) })
   powerButton.addEventListener('click', () => updateSettings({ enabled: !settings.enabled }))
   autoButton.addEventListener('click', () => updateSettings({ auto: !settings.auto }))
   styleSelect.addEventListener('change', () => updateSettings({ style: styleSelect.value }))
@@ -613,7 +614,13 @@ export function setup(ctx) {
   fontDown.addEventListener('click', () => updateSettings({ fontSize: clamp(settings.fontSize, 13, 10, 24) - 1 }))
   fontUp.addEventListener('click', () => updateSettings({ fontSize: clamp(settings.fontSize, 13, 10, 24) + 1 }))
   quickClear.addEventListener('click', () => ctx.sendToBackend({ type: 'clear' }))
-  liveButton.addEventListener('click', () => { paused = false; updateSettings({ livestream: !settings.livestream, paused: false }) })
+  liveButton.addEventListener('click', () => {
+    const enable = !settings.livestream
+    if (!enable && busy) ctx.sendToBackend({ type: 'cancel' })
+    paused = false
+    updateSettings({ livestream: enable, paused: false })
+    if (enable && shown < items.length) revealNext()
+  })
   pauseButton.addEventListener('click', () => {
     paused = !paused
     if (paused) { clearTimer(); clearReveal(); setStatus('Livestream paused') }
@@ -687,7 +694,7 @@ export function setup(ctx) {
       items = []; shown = 0; receiveItems(payload.items, false)
       setStatus(chatId ? 'Ready' : 'Open a chat'); render()
     } else if (payload.type === 'reactions' && payload.chatId === chatId) {
-      receiveItems(payload.items, true); setStatus(settings.livestream ? 'Live' : 'Ready'); renderControls()
+      receiveItems(payload.items, payload.animate !== false); setStatus(settings.livestream ? 'Live' : 'Ready'); renderControls()
     } else if (payload.type === 'busy' && payload.chatId === chatId) {
       busy = !!payload.value
       if (busy) clearTimer()
