@@ -1,0 +1,21 @@
+{
+  "name": "lumiverse-echochamber",
+  "version": "2.0.0",
+  "description": "SillyTavern EchoChamber v5.2.0 adapted for Lumiverse",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-upstream.mjs",
+    "styles": "node scripts/bundle-styles.mjs",
+    "test": "node --test tests/bridge-backend.test.mjs tests/upstream-port.test.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "jsdom": "^30.1.1"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.7.2",
+    "dompurify": "^3.4.16",
+    "jquery": "^3.7.1"
+  }
+}
