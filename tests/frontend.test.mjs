@@ -176,3 +176,18 @@ test('chat switch cancels generation before loading the new feed', () => {
   assert.ok(generate)
   app.dispose()
 })
+
+test('generation errors remain readable after busy clears and reset on retry', () => {
+  const app = harness()
+  app.receive({ type: 'state', chatId: 'chat-1', settings: { position: 'drawer' }, items: [] })
+  const status = walk(app.root, node => node.className === 'ec-status')[0]
+  app.receive({ type: 'busy', chatId: 'chat-1', value: true })
+  app.receive({ type: 'error', message: 'Grant Chat Mutation permission to EchoChamber.' })
+  app.receive({ type: 'busy', chatId: 'chat-1', value: false })
+  assert.match(status.textContent, /Grant Chat Mutation permission/)
+  assert.equal(status.dataset.error, 'true')
+  app.receive({ type: 'busy', chatId: 'chat-1', value: true })
+  assert.equal(status.dataset.error, 'false')
+  assert.match(status.textContent, /Generating reactions/)
+  app.dispose()
+})

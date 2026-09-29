@@ -20,7 +20,7 @@ const css = `
 .ec-head,.ec-quick,.ec-foot,.ec-actions{display:flex;align-items:center;gap:6px}.ec-head{padding:8px;border-bottom:1px solid var(--ec-border);flex-wrap:wrap}.ec-title{font-size:15px;font-weight:750;margin-right:auto}.ec-quick{padding:6px 8px;border-bottom:1px solid var(--ec-border);flex-wrap:wrap}.ec-quick label{display:flex;align-items:center;gap:4px}.ec-quick input[type=number]{width:48px}
 .ec-shell button,.ec-shell select,.ec-shell input,.ec-shell textarea{font:inherit}.ec-shell button{border:1px solid var(--ec-border);border-radius:6px;background:var(--ec-surface);color:inherit;padding:5px 7px;cursor:pointer}.ec-shell button:hover{filter:brightness(1.15)}.ec-shell button:disabled{opacity:.45;cursor:default}.ec-shell button[aria-pressed=true]{border-color:var(--ec-accent);color:var(--ec-accent)}
 .ec-shell input,.ec-shell select,.ec-shell textarea{min-width:0;border:1px solid var(--ec-border);border-radius:6px;background:var(--ec-surface);color:inherit;padding:5px 7px}.ec-shell textarea{resize:vertical;width:100%;box-sizing:border-box}.ec-shell :is(button,input,select,textarea):focus-visible{outline:2px solid var(--ec-accent);outline-offset:2px}.ec-quick select{max-width:150px}
-.ec-status{min-height:18px;padding:2px 10px;color:var(--ec-muted);font-size:11px}.ec-status[data-error=true]{color:#ef727a}.ec-list{flex:1;min-height:90px;overflow:auto;padding:4px 10px;overscroll-behavior:contain}.ec-empty{color:var(--ec-muted);padding:18px 4px;text-align:center}
+.ec-status{min-height:18px;padding:2px 10px;color:var(--ec-muted);font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}.ec-status[data-error=true]{color:#ef727a}.ec-list{flex:1;min-height:90px;overflow:auto;padding:4px 10px;overscroll-behavior:contain}.ec-empty{color:var(--ec-muted);padding:18px 4px;text-align:center}
 .ec-row{display:flex;gap:8px;align-items:flex-start;padding:7px 2px;border-bottom:1px solid var(--ec-border)}.ec-avatar{flex:none;width:27px;height:27px;display:grid;place-items:center;border-radius:50%;font-weight:700;font-size:11px;color:white}.ec-copy{min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}.ec-name{padding:0!important;background:transparent!important;border:0!important;font-weight:700;color:var(--ec-accent)!important;margin-right:5px}.ec-row[data-mine=true] .ec-name{color:var(--ec-user-color,#3b82f6)!important}.ec-message code{background:var(--ec-surface);border-radius:3px;padding:1px 3px}.ec-message u{text-decoration:underline}.ec-message .ec-mention{color:var(--ec-accent);font-weight:600}
 .ec-foot{padding:8px;border-top:1px solid var(--ec-border)}.ec-compose{display:flex;gap:6px;width:100%;position:relative}.ec-compose input{flex:1}.ec-mentions{position:absolute;bottom:100%;left:0;right:0;max-height:160px;overflow:auto;background:var(--ec-surface);border:1px solid var(--ec-border);border-radius:6px;z-index:2}.ec-mentions[hidden]{display:none}.ec-mentions button{display:block;width:100%;text-align:left;border:0;border-radius:0}
 .ec-options{display:none;overflow:auto;min-height:0;max-height:48%;padding:8px;border-top:1px solid var(--ec-border);gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.ec-options[data-open=true]{display:grid}.ec-options label{display:flex;flex-direction:column;gap:3px}.ec-options label.ec-inline{flex-direction:row;align-items:center}.ec-options input[type=number]{width:100%;box-sizing:border-box}.ec-wide{grid-column:1/-1}.ec-actions{flex-wrap:wrap}.ec-style-list{display:flex;flex-direction:column;gap:5px;max-height:145px;overflow:auto}.ec-style-row{display:flex;align-items:center;gap:5px}.ec-style-row span{flex:1}.ec-style-editor{display:none;gap:6px}.ec-style-editor[data-open=true]{display:grid}.ec-style-editor textarea{min-height:105px}.ec-shell[data-collapsed=true] .ec-list,.ec-shell[data-collapsed=true] .ec-foot,.ec-shell[data-collapsed=true] .ec-options,.ec-shell[data-collapsed=true] .ec-status{display:none!important}.ec-dock .ec-shell{min-height:240px}.ec-float .ec-shell{min-height:240px;border:1px solid var(--ec-border);border-radius:8px;overflow:hidden}
@@ -464,7 +464,7 @@ export function setup(ctx) {
   }
   function scheduleLive() {
     clearTimer()
-    if (!alive || !chatId || !settings.enabled || !settings.livestream || settings.livestreamMode !== 'onComplete' || paused || busy || shown < items.length) return
+    if (!alive || !chatId || !settings.enabled || !settings.livestream || settings.livestreamMode !== 'onComplete' || paused || busy || status.dataset.error === 'true' || shown < items.length) return
     timer = setTimeout(() => {
       timer = null
       if (!alive || !chatId || busy || !settings.livestream || paused) return
@@ -691,7 +691,8 @@ export function setup(ctx) {
     } else if (payload.type === 'busy' && payload.chatId === chatId) {
       busy = !!payload.value
       if (busy) clearTimer()
-      setStatus(busy ? 'Generating reactions…' : settings.livestream ? 'Live' : 'Ready')
+      if (busy) setStatus('Generating reactions…')
+      else if (status.dataset.error !== 'true') setStatus(settings.livestream ? 'Live' : 'Ready')
       renderControls(); if (!busy) scheduleLive()
     } else if (payload.type === 'settings') {
       const previousPosition = settings.position
@@ -713,7 +714,6 @@ export function setup(ctx) {
       }
     } else if (payload.type === 'error') {
       clearTimer(); setStatus(String(payload.message || 'Generation failed'), true)
-      if (settings.livestream) timer = setTimeout(scheduleLive, 3000)
     }
   })
   const unChat = ctx.events.on('CHAT_SWITCHED', payload => {
