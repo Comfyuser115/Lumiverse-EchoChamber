@@ -24,6 +24,7 @@ const css = `
 .ec-row{display:flex;gap:8px;align-items:flex-start;padding:7px 2px;border-bottom:1px solid var(--ec-border)}.ec-avatar{flex:none;width:27px;height:27px;display:grid;place-items:center;border-radius:50%;font-weight:700;font-size:11px;color:white}.ec-copy{min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}.ec-name{padding:0!important;background:transparent!important;border:0!important;font-weight:700;color:var(--ec-accent)!important;margin-right:5px}.ec-row[data-mine=true] .ec-name{color:var(--ec-user-color,#3b82f6)!important}.ec-message code{background:var(--ec-surface);border-radius:3px;padding:1px 3px}.ec-message u{text-decoration:underline}.ec-message .ec-mention{color:var(--ec-accent);font-weight:600}
 .ec-foot{padding:8px;border-top:1px solid var(--ec-border)}.ec-compose{display:flex;gap:6px;width:100%;position:relative}.ec-compose input{flex:1}.ec-mentions{position:absolute;bottom:100%;left:0;right:0;max-height:160px;overflow:auto;background:var(--ec-surface);border:1px solid var(--ec-border);border-radius:6px;z-index:2}.ec-mentions[hidden]{display:none}.ec-mentions button{display:block;width:100%;text-align:left;border:0;border-radius:0}
 .ec-options{display:none;overflow:auto;min-height:0;max-height:48%;padding:8px;border-top:1px solid var(--ec-border);gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.ec-options[data-open=true]{display:grid}.ec-options label{display:flex;flex-direction:column;gap:3px}.ec-options label.ec-inline{flex-direction:row;align-items:center}.ec-options input[type=number]{width:100%;box-sizing:border-box}.ec-wide{grid-column:1/-1}.ec-actions{flex-wrap:wrap}.ec-style-list{display:flex;flex-direction:column;gap:5px;max-height:145px;overflow:auto}.ec-style-row{display:flex;align-items:center;gap:5px}.ec-style-row span{flex:1}.ec-style-editor{display:none;gap:6px}.ec-style-editor[data-open=true]{display:grid}.ec-style-editor textarea{min-height:105px}.ec-shell[data-collapsed=true] .ec-list,.ec-shell[data-collapsed=true] .ec-foot,.ec-shell[data-collapsed=true] .ec-options,.ec-shell[data-collapsed=true] .ec-status{display:none!important}.ec-dock .ec-shell{min-height:240px}.ec-float .ec-shell{min-height:240px;border:1px solid var(--ec-border);border-radius:8px;overflow:hidden}
+.ec-sidebar .ec-options{display:grid;max-height:none;flex:1;border-top:0}.ec-sidebar .ec-head{flex:none}
 `
 
 function element(tag, className = '', text = null) {
@@ -103,6 +104,13 @@ export function setup(ctx) {
   })
   const shell = element('section', 'ec-shell')
   shell.setAttribute('aria-label', 'EchoChamber audience')
+  const sidebar = element('section', 'ec-shell ec-sidebar')
+  sidebar.setAttribute('aria-label', 'EchoChamber settings')
+  const sidebarHead = element('div', 'ec-head')
+  sidebarHead.append(element('strong', 'ec-title', 'EchoChamber settings'))
+  const showInSidebar = button('Show feed here')
+  sidebarHead.append(showInSidebar)
+  sidebar.append(sidebarHead)
   const head = element('div', 'ec-head')
   const title = element('strong', 'ec-title', 'EchoChamber')
   const powerButton = button('●', 'Enable or disable EchoChamber')
@@ -390,7 +398,11 @@ export function setup(ctx) {
   function place() {
     const where = POSITIONS.includes(settings.position) ? settings.position : 'drawer'
     if (placement) { tab.root.append(shell); placement.destroy(); placement = null }
-    if (where === 'drawer') return
+    if (where === 'drawer') {
+      shell.append(options)
+      sidebar.remove()
+      return
+    }
     try {
       const panelWidth = clamp(settings.panelWidth, 350, 240, 1000)
       const panelHeight = clamp(settings.panelHeight, 250, 180, 1000)
@@ -413,9 +425,13 @@ export function setup(ctx) {
         placement.root.classList.add('ec-dock')
       }
       placement.root.append(shell)
+      sidebar.append(options)
+      tab.root.append(sidebar)
     } catch (error) {
       if (placement) { try { placement.destroy() } catch {} placement = null }
       tab.root.append(shell)
+      shell.append(options)
+      sidebar.remove()
       setStatus(`Panel unavailable: ${String(error?.message || error)}`, true)
     }
   }
@@ -589,7 +605,11 @@ export function setup(ctx) {
     updateSettings({ paused })
   })
   collapseButton.addEventListener('click', () => updateSettings({ collapsed: !settings.collapsed }))
-  optionsButton.addEventListener('click', () => { options.dataset.open = String(options.dataset.open !== 'true') })
+  optionsButton.addEventListener('click', () => {
+    if (placement) tab.activate()
+    else options.dataset.open = String(options.dataset.open !== 'true')
+  })
+  showInSidebar.addEventListener('click', () => updateSettings({ position: 'drawer' }))
   sendButton.addEventListener('click', sendReply)
   replyInput.addEventListener('input', showMentions)
   replyInput.addEventListener('keydown', event => {
@@ -700,6 +720,6 @@ export function setup(ctx) {
   return () => {
     alive = false; clearTimer(); clearReveal(); unsub(); unChat(); unGeneration(); unMessage()
     if (placement) placement.destroy()
-    tab.destroy(); removeStyle(); shell.remove()
+    tab.destroy(); removeStyle(); shell.remove(); sidebar.remove()
   }
 }

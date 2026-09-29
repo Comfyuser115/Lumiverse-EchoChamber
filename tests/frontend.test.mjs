@@ -18,10 +18,10 @@ class Node {
   }
   set textContent(value) { this.children = [new Node('#text', String(value))] }
   get textContent() { return this.tagName === '#text' ? this.value : this.children.map(x => x.textContent).join('') }
-  append(...nodes) { this.children.push(...nodes) }
-  replaceChildren(...nodes) { this.children = nodes }
-  prepend(...nodes) { this.children.unshift(...nodes) }
-  remove() {}
+  append(...nodes) { for (const node of nodes) { node.remove(); node.parent = this; this.children.push(node) } }
+  replaceChildren(...nodes) { for (const node of this.children) node.parent = null; this.children = []; this.append(...nodes) }
+  prepend(...nodes) { for (const node of nodes.reverse()) { node.remove(); node.parent = this; this.children.unshift(node) } }
+  remove() { if (this.parent) { this.parent.children = this.parent.children.filter(node => node !== this); this.parent = null } }
   setAttribute(name, value) { this.attributes[name] = value }
   addEventListener(name, handler) { this.listeners.set(name, handler) }
   click() { this.listeners.get('click')?.({ preventDefault() {} }) }
@@ -45,7 +45,7 @@ function harness() {
   const ctx = {
     dom: { addStyle: () => () => {} },
     ui: {
-      registerDrawerTab: () => ({ root, destroy() {} }),
+      registerDrawerTab: () => ({ root, activate() {}, destroy() {} }),
       requestDockPanel(options) {
         const panel = { options, root: new Node('dock'), destroy() {} }
         docks.push(panel); return panel
@@ -82,16 +82,23 @@ test('Spindle placement requests each edge and a floating widget', () => {
     app.receive({ type: 'settings', settings: { position: edge } })
     assert.equal(app.docks.at(-1).options.edge, edge)
     assert.equal(app.docks.at(-1).options.respectRequestedEdge, true)
+    assert.equal(walk(app.root, node => node.className?.split(' ').includes('ec-sidebar')).length, 1)
+    assert.equal(walk(app.root, node => node.tagName === 'label' && node.textContent.startsWith('Backend')).length > 0, true)
+    assert.equal(walk(app.root, node => node.className === 'ec-row').length, 0)
   }
   app.receive({ type: 'settings', settings: { position: 'float' } })
   assert.equal(app.floats.length, 1)
   assert.equal(app.floats[0].options.resizable, true)
+  walk(app.root, node => node.tagName === 'button' && node.textContent === 'Show feed here')[0].click()
+  assert.equal(app.sent.at(-1).settings.position, 'drawer')
+  assert.equal(walk(app.root, node => node.className?.split(' ').includes('ec-sidebar')).length, 0)
+  assert.equal(walk(app.root, node => node.className === 'ec-shell').length, 1)
   app.dispose()
 })
 
 test('quick controls send settings, stop, and audience reply with a mention', () => {
   const app = harness()
-  app.receive({ type: 'state', chatId: 'chat-1', settings: {}, styles: ['discordtwitch'], items: [{ name: 'Alice', text: 'Hello' }] })
+  app.receive({ type: 'state', chatId: 'chat-1', settings: { position: 'drawer' }, styles: ['discordtwitch'], items: [{ name: 'Alice', text: 'Hello' }] })
   const buttons = walk(app.root, node => node.tagName === 'button')
   buttons.find(node => node.textContent === '↻ Regenerate').click()
   assert.deepEqual(app.sent.at(-1), { type: 'generate' })
@@ -111,7 +118,7 @@ test('quick controls send settings, stop, and audience reply with a mention', ()
 
 test('built-in style editing requests its prompt and saves an override', () => {
   const app = harness()
-  app.receive({ type: 'state', chatId: 'chat-1', settings: {}, styles: ['discordtwitch'], items: [] })
+  app.receive({ type: 'state', chatId: 'chat-1', settings: { position: 'drawer' }, styles: ['discordtwitch'], items: [] })
   const edit = walk(app.root, node => node.tagName === 'button' && node.textContent === 'Edit')[0]
   edit.click()
   assert.deepEqual(app.sent.at(-1), { type: 'get_style', id: 'ao3wattpad' })
@@ -142,7 +149,7 @@ test('on-message live mode reacts to user messages and manual mode stays idle', 
 
 test('chat switch cancels generation before loading the new feed', () => {
   const app = harness()
-  app.receive({ type: 'state', chatId: 'chat-1', settings: {}, items: [] })
+  app.receive({ type: 'state', chatId: 'chat-1', settings: { position: 'drawer' }, items: [] })
   app.receive({ type: 'busy', chatId: 'chat-1', value: true })
   app.events.get('CHAT_SWITCHED')({ chatId: 'chat-2' })
   assert.deepEqual(app.sent.slice(-2), [{ type: 'cancel' }, { type: 'chat', chatId: 'chat-2' }])
