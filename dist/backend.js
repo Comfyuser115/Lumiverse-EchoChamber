@@ -135,6 +135,11 @@ function parseReactions(content, limit, allowGeneric = true) {
         }).filter(Boolean).slice(0, limit)
         if (structured.length) return structured
       }
+      if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+        const name = limited(parsed.username || parsed.name || parsed.user || parsed.speaker, 80)
+        const text = limited(parsed.message || parsed.text, 2000)
+        if (name && text) return [{ name, text }]
+      }
       const nested = parsed?.choices?.[0]?.message?.content || parsed?.output || parsed?.content
       if (typeof nested === 'string' && nested !== source) return parseReactions(nested, limit, allowGeneric)
       return []
@@ -148,7 +153,9 @@ function parseReactions(content, limit, allowGeneric = true) {
     const line = raw.trim().replace(/^```[^`]*$/, '').trim()
     if (!line || /^[-_.…]{3,}$/.test(line) || /^\s*(?:here (?:are|is)|reactions?:|comments?:|chat:)/i.test(line)) continue
     const cleaned = line.replace(/^(?:[-*]\s+|\d+[.)]\s+)/, '')
-    const match = cleaned.match(/^(.{1,80}?):\s*(.+)$/)
+    const match = cleaned.match(/^(.{1,80}?):\s*(.+)$/) ||
+      cleaned.match(/^\[([^\]]{1,80})\]\s+(.+)$/) ||
+      cleaned.match(/^([^–—-]{1,80}?)\s+[–—-]\s+(.+)$/)
     if (match) {
       const name = match[1].trim().replace(/^[*_`"']+|[*_`"']+$/g, '')
       const text = match[2].trim()
@@ -185,7 +192,7 @@ async function providerPost(url, body, apiKey) {
 async function modelText(messages, settings, userId, signal) {
   if (settings.source === 'lumiverse') {
     if (!spindle.permissions.has('generation')) throw new Error('Grant Generation permission to EchoChamber.')
-    const input = { userId, messages, parameters: { max_tokens: settings.maxTokens }, signal }
+    const input = { userId, messages, parameters: { max_tokens: settings.maxTokens }, reasoning: { source: 'off' }, signal }
     if (settings.connectionId) {
       const profile = await spindle.connections.get(settings.connectionId, userId)
       if (!profile) throw new Error('Selected Lumiverse connection profile was not found.')

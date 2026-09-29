@@ -99,6 +99,7 @@ test('Lumiverse profile, reply target and custom prompt are passed into generati
   await message({ type: 'settings', settings: { source: 'lumiverse', connectionId: 'conn1', style: 'custom' } })
   await message({ type: 'reply', text: 'Hi @Viewer', target: 'Viewer' })
   assert.equal(generationCalls.at(-1).connection_id, 'conn1')
+  assert.deepEqual(generationCalls.at(-1).reasoning, { source: 'off' })
   assert.match(generationCalls.at(-1).messages[0].content, /Custom prompt/)
   assert.match(generationCalls.at(-1).messages[1].content, /@Viewer/)
   assert.equal(last('reactions').items.at(-2).target, 'Viewer')
@@ -163,6 +164,8 @@ test('reaction parser accepts markdown, structured replies, prose, and strips re
   for (const [reply, expectedName] of [
     ['**River**: Big moment!\n2. @Dax: I saw that too.', '@Dax'],
     [JSON.stringify({ reactions: [{ username: 'JSONFan', message: 'That twist!' }] }), 'JSONFan'],
+    [JSON.stringify({ username: 'SoloFan', message: 'Amazing scene!' }), 'SoloFan'],
+    ['DashFan — I loved that twist.', 'DashFan'],
     ['The crowd gasps at the surprise.', 'Viewer'],
     ['<think>Private reasoning</think>\nSage: What a scene.', 'Sage'],
   ]) {

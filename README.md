@@ -29,7 +29,7 @@ The repository includes ready-to-load `dist/` files. It does not require npm pac
 
 ## Model backends
 
-- **Lumiverse:** Choose a saved profile from the panel's **Model** control or **Settings → Lumiverse connection**. Profile names and model IDs are shown together, so you can select a cheaper model for audience reactions while keeping your main RP connection. Choose **Use main Lumiverse connection** to follow your active connection. Press **Refresh connections** in settings after adding a profile in Lumiverse.
+- **Lumiverse:** Choose a saved profile from the panel's **Model** control or **Settings → Lumiverse connection**. Profile names and model IDs are shown together, so you can select a cheaper model for audience reactions while keeping your main RP connection. Choose **Use main Lumiverse connection** to follow your active connection. Press **Refresh connections** in settings after adding a profile in Lumiverse. EchoChamber turns reasoning off for its own short reaction requests without changing the profile's saved reasoning settings.
 - **Ollama:** Enter the server URL and model name. The request goes to `/api/chat`.
 - **OpenAI-compatible:** Enter a base URL and model name. The extension calls `/v1/chat/completions`. This works with servers offering that endpoint, including KoboldCPP, LM Studio, and vLLM. An optional API key is stored in Lumiverse's encrypted per-user secure enclave.
 
