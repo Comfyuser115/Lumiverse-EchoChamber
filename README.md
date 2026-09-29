@@ -49,7 +49,7 @@ API keys stay in the secure enclave; they are not returned to the browser as set
 
 ## Style files and development
 
-Custom styles can be imported or exported as Markdown or JSON in the panel's Style Manager. The Markdown files under `chat-styles/` are the original source prompts. At runtime, the backend reads their bundled copy in `dist/styles.js`; changing a Markdown source file alone does not alter an installed style.
+Custom styles can be imported or exported as Markdown or JSON in the panel's Style Manager. The Markdown files under `chat-styles/` are the source prompts. At runtime, the backend reads their bundled copy in `dist/styles.js`. After batch editing the Markdown files, run `node scripts/bundle-styles.mjs` from the repository root and include the updated `dist/styles.js` when publishing.
 
 Run local checks with `node --test tests/*.test.mjs`. These exercise the backend and frontend protocol with fixtures; they do not access your Lumiverse account or content.
 
