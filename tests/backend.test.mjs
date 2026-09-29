@@ -28,7 +28,10 @@ globalThis.spindle = {
   },
   chats: { getActive: async () => ({ id: 'chat1' }), get: async () => { contextReads.push('chat'); return { id: 'chat1', character_id: 'char1', metadata: { authors_note: { content: 'A note' }, summary: 'Past summary' } } } },
   chat: { getMessages: async () => messages },
-  connections: { list: async () => [{ id: 'conn1', name: 'Local', model: 'mock', provider: 'openai' }], get: async id => id === 'conn1' ? { id } : null },
+  connections: { list: async () => [
+    { id: 'conn1', name: 'Main RP', model: 'expensive-model', provider: 'openai', is_default: true },
+    { id: 'conn2', name: 'Audience', model: 'cheap-model', provider: 'openai', is_default: false },
+  ], get: async id => ['conn1', 'conn2'].includes(id) ? { id } : null },
   generate: { quiet: async input => { generationCalls.push(input); if (generationGate) await generationGate.promise; return { content: generationText } } },
   cors: async (url, options) => { corsCalls.push({ url, options }); return corsResponse },
   tokens: { countText: async text => ({ total_tokens: Math.ceil(text.length / 4) }) },
@@ -48,7 +51,16 @@ test('hydrate returns per-user state and connection profiles without reading opt
   await message({ type: 'hydrate' })
   assert.equal(last('state').chatId, 'chat1')
   assert.equal(last('state').connections[0].id, 'conn1')
+  assert.equal(last('state').connections[1].model, 'cheap-model')
   assert.equal(last('state').settings.hasApiKey, false)
+})
+
+test('refresh discovers profiles and selected cheaper profile routes generation independently', async () => {
+  await message({ type: 'connections_refresh' })
+  assert.equal(last('connections').connections[1].name, 'Audience')
+  await message({ type: 'settings', settings: { source: 'lumiverse', connectionId: 'conn2' } })
+  await message({ type: 'generate' })
+  assert.equal(generationCalls.at(-1).connection_id, 'conn2')
 })
 
 test('settings preserve fields, custom styles, built-in override and visibility', async () => {

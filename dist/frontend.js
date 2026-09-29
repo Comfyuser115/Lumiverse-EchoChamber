@@ -121,6 +121,8 @@ export function setup(ctx) {
   head.append(title, powerButton, liveButton, pauseButton, collapseButton, optionsButton)
   const quick = element('div', 'ec-quick')
   const styleSelect = element('select'); styleSelect.setAttribute('aria-label', 'Audience style')
+  const quickConnection = element('select'); quickConnection.setAttribute('aria-label', 'EchoChamber Lumiverse connection')
+  const quickConnectionLabel = element('label', '', 'Model'); quickConnectionLabel.append(quickConnection)
   const count = input('number'); count.min = '1'; count.max = '20'; count.setAttribute('aria-label', 'Audience size')
   const countLabel = element('label', '', 'Viewers'); countLabel.append(count)
   const generateButton = button('↻ Regenerate', 'Generate reactions')
@@ -130,7 +132,7 @@ export function setup(ctx) {
   const fontDown = button('A−', 'Decrease font size')
   const fontUp = button('A+', 'Increase font size')
   const quickClear = button('Clear', 'Clear reactions in this chat')
-  quick.append(styleSelect, countLabel, generateButton, autoButton, quickPosition, fontDown, fontUp, quickClear)
+  quick.append(styleSelect, quickConnectionLabel, countLabel, generateButton, autoButton, quickPosition, fontDown, fontUp, quickClear)
   const status = element('div', 'ec-status', 'Loading…'); status.setAttribute('role', 'status')
   const list = element('div', 'ec-list'); list.setAttribute('role', 'log'); list.setAttribute('aria-label', 'Audience reactions')
   const foot = element('div', 'ec-foot')
@@ -144,7 +146,8 @@ export function setup(ctx) {
   for (const place of POSITIONS) position.append(option(place, place[0].toUpperCase() + place.slice(1)))
   const source = element('select')
   for (const [id, label] of [['lumiverse', 'Lumiverse connection'], ['ollama', 'Ollama'], ['openai', 'OpenAI-compatible']]) source.append(option(id, label))
-  const connection = element('select'); connection.append(option('', 'Current connection'))
+  const connection = element('select'); connection.append(option('', 'Use main Lumiverse connection'))
+  const refreshConnections = button('Refresh connections')
   const ollamaUrl = input('url'); ollamaUrl.placeholder = 'http://localhost:11434'
   const ollamaModel = input('text'); ollamaModel.placeholder = 'Model name'
   const openaiUrl = input('url'); openaiUrl.placeholder = 'http://localhost:1234/v1'
@@ -193,7 +196,7 @@ export function setup(ctx) {
   const chatAvatarColor = input('color')
   const chatReplyCount = input('number'); chatReplyCount.min = '1'; chatReplyCount.max = '20'
   options.append(
-    field('Panel position', position), field('Backend', source), field('Lumiverse connection', connection),
+    field('Panel position', position), field('Backend', source), field('Lumiverse connection', connection), refreshConnections,
     field('Ollama URL', ollamaUrl), field('Ollama model', ollamaModel),
     field('OpenAI-compatible preset', openaiPreset), field('OpenAI-compatible URL', openaiUrl),
     field('OpenAI-compatible model', openaiModel),
@@ -261,6 +264,14 @@ export function setup(ctx) {
     return [...new Set([...order.filter(id => available.includes(id)), ...available])]
   }
   function styleLabel(id) { return settings.customStyles?.[id]?.name || STYLE_LABELS[id] || id }
+  function connectionOptions() {
+    return [option('', 'Use main Lumiverse connection'), ...connections.map(profile => {
+      const name = String(profile.name || profile.id)
+      const model = profile.model ? ` · ${profile.model}` : ''
+      const provider = profile.provider ? ` (${profile.provider})` : ''
+      return option(String(profile.id), `${name}${model}${provider}`)
+    })]
+  }
   function renderStyles() {
     const ids = orderedStyles()
     styleSelect.replaceChildren(...ids.map(id => option(id, styleLabel(id))))
@@ -367,8 +378,11 @@ export function setup(ctx) {
     openaiPreset.value = [...openaiPreset.children].some(item => item.value === settings.openaiUrl) ? settings.openaiUrl : ''
     openaiModel.value = settings.openaiModel || ''
     clearKeyButton.disabled = !settings.hasApiKey
-    connection.replaceChildren(option('', 'Current connection'), ...connections.map(entry => option(String(entry.id), String(entry.name || entry.model || entry.id))))
+    connection.replaceChildren(...connectionOptions())
     connection.value = settings.connectionId || ''
+    quickConnection.replaceChildren(...connectionOptions())
+    quickConnection.value = settings.connectionId || ''
+    quickConnection.title = settings.source === 'lumiverse' ? 'Choose the Lumiverse connection for EchoChamber reactions' : 'Choose a Lumiverse connection to switch back from an external backend'
     source.value = settings.source || 'lumiverse'
     position.value = settings.position || 'bottom'
     liveMode.value = settings.livestreamMode || 'manual'
@@ -593,6 +607,8 @@ export function setup(ctx) {
   powerButton.addEventListener('click', () => updateSettings({ enabled: !settings.enabled }))
   autoButton.addEventListener('click', () => updateSettings({ auto: !settings.auto }))
   styleSelect.addEventListener('change', () => updateSettings({ style: styleSelect.value }))
+  quickConnection.addEventListener('change', () => updateSettings({ source: 'lumiverse', connectionId: quickConnection.value }))
+  refreshConnections.addEventListener('click', () => ctx.sendToBackend({ type: 'connections_refresh' }))
   quickPosition.addEventListener('change', () => updateSettings({ position: quickPosition.value }))
   fontDown.addEventListener('click', () => updateSettings({ fontSize: clamp(settings.fontSize, 13, 10, 24) - 1 }))
   fontUp.addEventListener('click', () => updateSettings({ fontSize: clamp(settings.fontSize, 13, 10, 24) + 1 }))
@@ -682,6 +698,10 @@ export function setup(ctx) {
       settings = { ...DEFAULTS, ...(payload.settings || {}) }
       if (settings.position !== previousPosition) place()
       render(); scheduleLive()
+    } else if (payload.type === 'connections') {
+      connections = Array.isArray(payload.connections) ? payload.connections : []
+      renderControls()
+      setStatus(`${connections.length} Lumiverse connection${connections.length === 1 ? '' : 's'} available`)
     } else if (payload.type === 'style_definition') {
       if (payload.id === editorId && !settings.customStyles?.[editorId]) {
         stylePrompt.value = String(payload.prompt || '')

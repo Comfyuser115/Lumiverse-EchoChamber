@@ -116,6 +116,24 @@ test('quick controls send settings, stop, and audience reply with a mention', ()
   app.dispose()
 })
 
+test('model selector switches EchoChamber to a chosen Lumiverse profile and can refresh profiles', () => {
+  const app = harness()
+  app.receive({ type: 'state', chatId: 'chat-1', settings: { position: 'drawer', source: 'lumiverse' },
+    connections: [
+      { id: 'main', name: 'Main RP', model: 'expensive-model', provider: 'openai', isDefault: true },
+      { id: 'audience', name: 'Audience', model: 'cheap-model', provider: 'openai' },
+    ], items: [] })
+  const selector = walk(app.root, node => node.attributes['aria-label'] === 'EchoChamber Lumiverse connection')[0]
+  assert.match(selector.children[2].textContent, /cheap-model/)
+  selector.value = 'audience'
+  selector.listeners.get('change')()
+  assert.equal(app.sent.at(-1).settings.connectionId, 'audience')
+  assert.equal(app.sent.at(-1).settings.source, 'lumiverse')
+  walk(app.root, node => node.tagName === 'button' && node.textContent === 'Refresh connections')[0].click()
+  assert.deepEqual(app.sent.at(-1), { type: 'connections_refresh' })
+  app.dispose()
+})
+
 test('built-in style editing requests its prompt and saves an override', () => {
   const app = harness()
   app.receive({ type: 'state', chatId: 'chat-1', settings: { position: 'drawer' }, styles: ['discordtwitch'], items: [] })

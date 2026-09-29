@@ -305,10 +305,16 @@ async function hydrate(userId) {
   const active = spindle.permissions.has('chats') ? await spindle.chats.getActive(userId) : null
   const chatId = safeChatId(active?.id)
   activeChats.set(userId, chatId)
-  const connections = spindle.permissions.has('generation')
-    ? (await spindle.connections.list(userId)).map(p => ({ id: p.id, name: p.name, model: p.model, provider: p.provider })) : []
-  send({ type: 'state', chatId, settings, styles: Object.keys(styles), connections,
+  send({ type: 'state', chatId, settings, styles: Object.keys(styles), connections: await listConnections(userId),
     items: chatId ? await loadChat(chatId, userId) : [] }, userId)
+}
+async function listConnections(userId) {
+  if (!spindle.permissions.has('generation')) return []
+  const profiles = await spindle.connections.list(userId)
+  return profiles.map(profile => ({
+    id: profile.id, name: profile.name, model: profile.model,
+    provider: profile.provider, isDefault: profile.is_default === true,
+  }))
 }
 async function settingsFor(userId) {
   if (userSettings.has(userId)) return userSettings.get(userId)
@@ -323,6 +329,9 @@ async function publicSettings(userId) {
 spindle.onFrontendMessage(async (payload, userId) => {
   try {
     if (payload?.type === 'hydrate') return await hydrate(userId)
+    if (payload?.type === 'connections_refresh') {
+      return send({ type: 'connections', connections: await listConnections(userId) }, userId)
+    }
     if (payload?.type === 'settings') {
       const settings = cleanSettings({ ...await settingsFor(userId), ...payload.settings })
       userSettings.set(userId, settings)
